@@ -307,6 +307,7 @@ def delete_account():
                         f"The account associated with the email address '{input_email}' has been successfully deleted.")
                     print("We apologize for any inconvenience caused.")
                     time.sleep(2)
+                    main()
                 else:
                     clear_screen()
                     print('Password is incorrect. Action failed.')
@@ -386,28 +387,46 @@ def decrypt_password(encoded_password, encryption_key):
 
 def add_password(username, master_password):
     clear_screen()
+    query = "SELECT website FROM passwords WHERE user_id = (SELECT user_id FROM users WHERE " \
+            "username = %s)"
+    cursor.execute(query, (username,))
+    result = cursor.fetchall()
+    websites = []
+    for row in result:
+        websites.append(row[0])
+
     try:
         website = input("Enter the website: ")
-        password = getpass("Enter the corresponding password: ")
-        created_at = datetime.now()  # Get the current timestamp
+        if website not in websites:
+            password = getpass("Enter the corresponding password: ")
+            created_at = datetime.now()  # Get the current timestamp
 
-        # Generate an encryption key from the master password
-        encryption_key = generate_encryption_key(master_password)
+            # Generate an encryption key from the master password
+            encryption_key = generate_encryption_key(master_password)
 
-        # Encrypt the password
-        encoded_password = encrypt_password(password, encryption_key)
+            # Encrypt the password
+            encoded_password = encrypt_password(password, encryption_key)
 
-        query = "SELECT user_id FROM users WHERE username = %s"
-        cursor.execute(query, (username,))
-        result = cursor.fetchall()
-        user_id = int([row[0] for row in result][0])
+            query = "SELECT user_id FROM users WHERE username = %s"
+            cursor.execute(query, (username,))
+            result = cursor.fetchall()
+            user_id = int([row[0] for row in result][0])
 
-        cursor.execute(
-            'INSERT INTO passwords (user_id, website, password, created_at) VALUES (%s, %s, %s, %s)',
-            (user_id, website, encoded_password, created_at))
-        conn.commit()
-        clear_screen()
-        print("Password stored successfully!")
+            cursor.execute(
+                'INSERT INTO passwords (user_id, website, password, created_at) VALUES (%s, %s, %s, %s)',
+                (user_id, website, encoded_password, created_at))
+            conn.commit()
+            clear_screen()
+            print("Password stored successfully!")
+        else:
+            print("The website already exists. Would you like to update the corresponding password? ")
+            answer = input("(y) or (n): ")
+            if answer == 'y':
+                update_password(username, master_password)
+            else:
+                print("No problem. \n""Returning to main..")
+                time.sleep(1)
+                main()
 
     except (Exception, psycopg2.Error) as error:
         conn.rollback()  # Roll back the transaction if an exception occurs
@@ -478,138 +497,343 @@ def view_passwords(username, master_password):
         return 'Invalid hash format'
 
 
-def main():
+def search(username, master_password):
     clear_screen()
-    print('''
-        Welcome to Your Password Manager!
 
-        Please select an option:\n
-            1. Sign-Up/Getting started
-            2. Login page
-            3. Help/Instructions
-            4. Exit
-    ''')
-    ans = input("")
+    query = "SELECT security_question, security_answer FROM users WHERE user_id = (SELECT user_id FROM users WHERE " \
+            "username = %s)"
+    cursor.execute(query, (username,))
+    result = cursor.fetchall()
+    for row in result:
+        security_question = row[0]
+        stored_hash_answer = row[1]
 
-    if ans == '1':
-        clear_screen()
-        create_account()
-    elif ans == '2':
-        clear_screen()
-        username, master_password = login()
-        i = 0
-        while True:
-            i = i + 1
-            if i != 1:
-                time.sleep(4)
+    print("To view your password, you must answer the security question first: ")
+    print(security_question)
+    answer = getpass("Answer: ")
+
+    # Clean the stored hash string
+    cleaned_hash_str = stored_hash_answer.replace('\\x', '').replace(' ', '').replace("'", '')
+
+    try:
+        # Convert the stored hashed answer to binary format
+        stored_hash_bytes = binascii.unhexlify(cleaned_hash_str)
+
+        # Check the entered answer against the stored hashed answer
+        if bcrypt.checkpw(answer.encode('utf-8'), stored_hash_bytes):
+            clear_screen()
+            try:
+                website = input("Please enter the website for which you would like to check the password: ")
+                query = "SELECT website, password FROM passwords WHERE user_id = (SELECT user_id FROM users WHERE " \
+                        "username = %s) AND website = %s"
+                cursor.execute(query, (username, website))
+                result = cursor.fetchall()
+
+                if len(result) == 0:
+                    print("No passwords found for the requested website.")
+                else:
+                    for row in result:
+                        website = row[0]
+                        encoded_password = row[1]
+
+                        encryption_key = generate_encryption_key(master_password)
+
+                        decrypted_password = decrypt_password(encoded_password, encryption_key)
+
+                        print(f"Website: {website}")
+                        print(f"Password: {decrypted_password}")
+                        print("")
+                time.sleep(3)
+
+            except (Exception, psycopg2.Error) as error:
+                print(f"An error occurred: {str(error)}")
+                print("Failed to retrieve passwords.")
+
+        else:
+            clear_screen()
+            print('Incorrect security answer.')
+            time.sleep(1.5)
+            main()
+
+    except binascii.Error:
+        return 'Invalid hash format'
+
+
+def update_password(username, master_password):
+    clear_screen()
+    query = "SELECT website FROM passwords WHERE user_id = (SELECT user_id FROM users WHERE " \
+            "username = %s)"
+    cursor.execute(query, (username,))
+    result = cursor.fetchall()
+    websites = []
+    for row in result:
+        websites.append(row[0])
+
+    website = input("Enter the website for which you want to update the password: ")
+
+    if website in websites:
+        query = "SELECT security_question, security_answer FROM users WHERE user_id = (SELECT user_id FROM users WHERE"\
+                "username = %s)"
+        cursor.execute(query, (username,))
+        result = cursor.fetchall()
+        for row in result:
+            security_question = row[0]
+            stored_hash_answer = row[1]
+
+        print("To update a password, you must answer the security question first: ")
+        print(security_question)
+        answer = getpass("Answer: ")
+
+        # Clean the stored hash string
+        cleaned_hash_str = stored_hash_answer.replace('\\x', '').replace(' ', '').replace("'", '')
+
+        try:
+            # Convert the stored hashed answer to binary format
+            stored_hash_bytes = binascii.unhexlify(cleaned_hash_str)
+
+            # Check the entered answer against the stored hashed answer
+            if bcrypt.checkpw(answer.encode('utf-8'), stored_hash_bytes):
                 clear_screen()
-            print('''
-                Please select an option:\n
-                    1. View Passwords
-                    2. Add Password
-                    3. Update Password
-                    4. Search
-                    5. Password Generator
-                    6. Account Settings
-                    7. Help/Instructions
-                    8. Exit
-            ''')
-            option = input("")
 
-            if option == '1':
-                view_passwords(username, master_password)
+                max_attempts = 2
+                attempt = 0
+                while attempt < max_attempts:
+                    new_password = getpass("Enter the new password: ")
+                    clear_screen()
+                    check_new_password = getpass("Re-enter the new password to confirm: ")
 
-            elif option == '2':
-                add_password(username, master_password)
-
-            elif option == '3':
-                pass
-            elif option == '4':
-                pass
-            elif option == '5':
-                pass
-            elif option == '6':
-                print('''
-                    1. Change Master Password
-                    2. Change Username
-                    3. Change Account Email
-                    4. Delete Account
-                ''')
-                choice = input("")
-                clear_screen()
-                if choice == '4':
-                    delete_account()
-            elif option == '7':
-                clear_screen()
-                print('''Help/Instructions:
-
-                    Welcome to the Password Manager App!
-
-                    Here's a quick guide to help you make the most of the app:
-
-                    1. View Passwords:
-                       See a list of all your saved passwords, along with the account names.
-                    2. Add Password:
-                       Store a new password securely by providing the account name, username, and password.
-                    3. Update Password:
-                       Modify an existing password entry. Choose the account and provide the updated details.
-                    4. Delete Password:
-                       Remove a password entry that you no longer need. Select the account to delete.
-                    5. Search:
-                       Quickly find a specific password by entering keywords or account names.
-                    6. Password Generator:
-                       Generate a strong and random password for your accounts. Customize the length and complexity.
-                    7. Account Settings:
-                       Manage your account preferences. Update your username, email address, master password.
-                       Delete account
-                    8. Help/Instructions:
-                       Access this helpful guide anytime for instructions on using the app's features.
-                    9. Exit:
-                        Log out of the app and return to the login screen.
-
-                    If you have any questions or need further assistance, don't hesitate to reach out to our support team.
-                    Enjoy using the Password Manager App! 
-                ''')
-                print("Press 'q' to go back.")
-
-                while True:
-                    if keyboard.is_pressed('q'):
+                    if new_password != check_new_password:
+                        attempt += 1
+                        print('\nThe passwords do not match. Remaining attempts: ' + str(max_attempts - attempt))
+                        if attempt == 2:
+                            print("You have exceeded the maximum number of attempts. Please try again later. ")
+                            time.sleep(1.5)
+                            main()
+                    elif new_password == check_new_password:
+                        clear_screen()
                         break
-                clear_screen()
-            elif option == '8':
-                main()
+
+                encryption_key = generate_encryption_key(master_password)
+                encrypted_password = encrypt_password(new_password, encryption_key)
+                created_at = datetime.now()
+
+                try:
+                    query = "UPDATE passwords SET password = %s, created_at = %s WHERE user_id = (SELECT user_id FROM "\
+                            "users WHERE " \
+                            "username = %s) AND website = %s"
+                    cursor.execute(query, (encrypted_password, created_at, username, website))
+                    conn.commit()
+                    print("Password updated successfully.")
+
+                except (Exception, psycopg2.Error) as error:
+                    conn.rollback()
+                    print(f"An error occurred: {str(error)}")
+                    print("Failed to update password.")
+
             else:
-                print("Invalid choice.")
+                clear_screen()
+                print('Incorrect security answer.')
+                time.sleep(1.5)
+                main()
+        except binascii.Error:
+            return 'Invalid hash format'
+    else:
+        print("The website you entered does not exist in your account. Would you like to add it? ")
+        answer = input("(y) or (n): ")
+        if answer == 'y':
+            add_password(username, master_password)
+        else:
+            print("No problem. \n""Returning to main..")
+            time.sleep(1)
+            main()
 
-    elif ans == '3':
-        clear_screen()
-        print("=== Password Manager Help/Instructions ===")
-        print()
-        print("To sign up and get started, select option 1 from the main menu." '\n')
-        print("If you already have an account, choose option 2 to access the login page." '\n')
-        print("If you wish to exit the password manager, choose option 4." '\n')
-        print()
-        print("Press 'q' to go back.")
 
-        while True:
-            if keyboard.is_pressed('q'):
-                break
-        clear_screen()
+def delete_password(username):
+    clear_screen()
+    query = "SELECT website FROM passwords WHERE user_id = (SELECT user_id FROM users WHERE " \
+            "username = %s)"
+    cursor.execute(query, (username,))
+    result = cursor.fetchall()
+    websites = []
+    for row in result:
+        websites.append(row[0])
+
+    website = input("Enter the website for which you want to delete the password: ")
+
+    if website in websites:
+        try:
+            query = "SELECT security_question, security_answer FROM users WHERE user_id = (SELECT user_id FROM users " \
+                    "WHERE " \
+                    "username = %s)"
+            cursor.execute(query, (username,))
+            result = cursor.fetchall()
+            for row in result:
+                security_question = row[0]
+                stored_hash_answer = row[1]
+
+            print("To delete a password, you must answer the security question first: ")
+            print(security_question)
+            answer = getpass("Answer: ")
+
+            # Clean the stored hash string
+            cleaned_hash_str = stored_hash_answer.replace('\\x', '').replace(' ', '').replace("'", '')
+
+            # Convert the stored hashed answer to binary format
+            stored_hash_bytes = binascii.unhexlify(cleaned_hash_str)
+
+            # Check the entered answer against the stored hashed answer
+            if bcrypt.checkpw(answer.encode('utf-8'), stored_hash_bytes):
+                query = "DELETE FROM passwords WHERE user_id = (SELECT user_id FROM users WHERE " \
+                        "username = %s) AND website = %s"
+                cursor.execute(query, (username, website))
+                conn.commit()
+                print("Password deleted successfully.")
+            else:
+                clear_screen()
+                print('Incorrect security answer.')
+                time.sleep(1.5)
+                main()
+
+        except (Exception, psycopg2.Error) as error:
+            conn.rollback()
+            print(f"An error occurred: {str(error)}")
+            print("Failed to delete password.")
+    else:
+        print("The website you entered does not exist in your account.")
+        time.sleep(1.5)
         main()
 
-    elif ans == '4':
-        print("Goodbye!")
-        exit()
+
+def main():
+    while True:
+        clear_screen()
+        print('''
+            Welcome to Your Password Manager!
+    
+            Please select an option:\n
+                1. Sign-Up/Getting started
+                2. Login page
+                3. Help/Instructions
+                4. Exit
+        ''')
+        ans = input("")
+
+        if ans == '1':
+            clear_screen()
+            create_account()
+        elif ans == '2':
+            clear_screen()
+            username, master_password = login()
+            i = 0
+            while True:
+                i = i + 1
+                if i != 1:
+                    time.sleep(4)
+                    clear_screen()
+                print('''
+                    Please select an option:\n
+                        1. View Passwords
+                        2. Add Password
+                        3. Update Password
+                        4. Delete password
+                        5. Search
+                        6. Password Generator
+                        7. Account Settings
+                        8. Help/Instructions
+                        9. Exit
+                ''')
+                option = input("")
+
+                if option == '1':
+                    view_passwords(username, master_password)
+
+                elif option == '2':
+                    add_password(username, master_password)
+
+                elif option == '3':
+                    update_password(username, master_password)
+
+                elif option == '4':
+                    delete_password(username)
+
+                elif option == '5':
+                    search(username, master_password)
+
+                elif option == '7':
+                    clear_screen()
+                    print('''
+                        1. Change Master Password
+                        2. Change Username
+                        3. Change Account Email
+                        4. Delete Account
+                    ''')
+                    choice = input("")
+                    clear_screen()
+                    if choice == '4':
+                        delete_account()
+                elif option == '8':
+                    clear_screen()
+                    print('''Help/Instructions:
+    
+                        Welcome to the Password Manager App!
+    
+                        Here's a quick guide to help you make the most of the app:
+    
+                        1. View Passwords:
+                           See a list of all your saved passwords, along with the account names.
+                        2. Add Password:
+                           Store a new password securely by providing the account name, username, and password.
+                        3. Update Password:
+                           Modify an existing password entry. Choose the account and provide the updated details.
+                        4. Delete Password:
+                           Remove a password entry that you no longer need. Select the account to delete.
+                        5. Search:
+                           Quickly find a specific password by entering keywords or account names.
+                        6. Password Generator:
+                           Generate a strong and random password for your accounts. Customize the length and complexity.
+                        7. Account Settings:
+                           Manage your account preferences. Update your username, email address, master password.
+                           Delete account
+                        8. Help/Instructions:
+                           Access this helpful guide anytime for instructions on using the app's features.
+                        9. Exit:
+                            Log out of the app and return to the login screen.
+    
+                        If you have any questions or need further assistance, don't hesitate to reach out to our support team.
+                        Enjoy using the Password Manager App! 
+                    ''')
+                    print("Press 'q' to go back.")
+
+                    while True:
+                        if keyboard.is_pressed('q'):
+                            break
+                    clear_screen()
+                elif option == '9':
+                    main()
+                else:
+                    print("Invalid choice.")
+
+        elif ans == '3':
+            clear_screen()
+            print("=== Password Manager Help/Instructions ===")
+            print()
+            print("To sign up and get started, select option 1 from the main menu." '\n')
+            print("If you already have an account, choose option 2 to access the login page." '\n')
+            print("If you wish to exit the password manager, choose option 4." '\n')
+            print()
+            print("Press 'q' to go back.")
+
+            while True:
+                if keyboard.is_pressed('q'):
+                    break
+            clear_screen()
+            main()
+
+        elif ans == '4':
+            print("Goodbye!")
+            exit()
 
 
 if __name__ == "__main__":
     main()
 
-'''
-
-next steps:
-    
-    * edit the delete account to also delete the rows in the passwords table that correspond to the deleted account
-    * implement the delete the password
-
-'''
