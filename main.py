@@ -48,7 +48,7 @@ def get_emails():
     return emails
 
 
-def generate_password():
+def generate_strong_password():
     """
     Criteria for the generate_password() function:
 
@@ -110,7 +110,7 @@ def create_account():
             print("Invalid option. ")
 
     if ans == '1':
-        password = generate_password()
+        password = generate_strong_password()
         print("Here's a strong password for your Password Manager account: " + password + "\n" "Please remember it!")
 
     elif ans == '2':
@@ -704,6 +704,24 @@ def delete_password(username):
         main()
 
 
+def password_generator(length=12, include_digits=True, include_symbols=True, include_uppercase=True):
+    # Define character sets
+    chars = string.ascii_lowercase
+    if include_digits:
+        chars += string.digits
+    if include_symbols:
+        chars += string.punctuation
+    if include_uppercase:
+        chars += string.ascii_uppercase
+
+    # Generate password
+    password = ''.join(random.choice(chars) for _ in range(int(length)))
+    clear_screen()
+    print("Here is a randomly-generated password based on the criteria you provided: {0}".format(password))
+    time.sleep(2.5)
+    return password
+
+
 def main():
     while True:
         clear_screen()
@@ -758,6 +776,53 @@ def main():
 
                 elif option == '5':
                     search(username, master_password)
+
+                elif option == '6':
+                    clear_screen()
+                    while True:
+                        length = input("Enter the desired length for your random password: ")
+                        if length.isdigit():
+                            break
+                        else:
+                            print("Invalid length type. ")
+
+                    while True:
+                        print("Would you like to include digits in the password? ")
+                        include_digits = True
+                        answer_digits = input("(y) or (n): ")
+                        if answer_digits == 'n':
+                            include_digits = False
+                            break
+                        elif answer_digits == 'y':
+                            break
+                        else:
+                            print("Invalid choice.")
+
+                    while True:
+                        print("Would you like to include Upper-case letters in the password? ")
+                        include_upper = True
+                        answer_upper = input("(y) or (n): ")
+                        if answer_upper == 'n':
+                            include_upper = False
+                            break
+                        elif answer_upper == 'y':
+                            break
+                        else:
+                            print("Invalid choice.")
+
+                    while True:
+                        print("Would you like to include symbols in the password? ")
+                        include_symbols = True
+                        answer_symbols = input("(y) or (n): ")
+                        if answer_symbols == 'n':
+                            include_symbols = False
+                            break
+                        elif answer_symbols == 'y':
+                            break
+                        else:
+                            print("Invalid choice.")
+
+                    password_generator(length, include_digits, include_symbols, include_upper)
 
                 elif option == '7':
                     clear_screen()
