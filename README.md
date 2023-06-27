@@ -9,7 +9,6 @@ The Password Manager Application is an ongoing project aimed at providing a secu
 - Password generation: The application can generate strong and random passwords based on specified requirements, such as length and character set.
 - Secure password storage: User passwords are securely stored using industry-standard encryption algorithms.
 - Password organization: Users can organize their passwords into categories and add relevant information such as website URLs and usernames.
-- Auto-fill functionality: The application provides an auto-fill feature that allows users to easily fill in login forms on websites and applications.
 - Master password protection: The application requires users to set up a master password to access their stored passwords, adding an additional layer of security.
 
 ## Installation
