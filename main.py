@@ -1,6 +1,8 @@
 # Input/Output and Utility Imports
 import base64
 import binascii
+import msvcrt
+
 import bcrypt
 import keyboard as keyboard
 import os
@@ -870,6 +872,7 @@ def main():
                     print("Press 'q' to go back.")
 
                     while True:
+                        msvcrt.getch().decode('utf-8')  # Decode the character from bytes to string
                         if keyboard.is_pressed('q'):
                             break
                     clear_screen()
@@ -889,6 +892,7 @@ def main():
             print("Press 'q' to go back.")
 
             while True:
+                msvcrt.getch().decode('utf-8')  # Decode the character from bytes to string
                 if keyboard.is_pressed('q'):
                     break
             clear_screen()
