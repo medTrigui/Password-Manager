@@ -1,0 +1,4 @@
+bcrypt
+keyboard
+psycopg2
+cryptography
